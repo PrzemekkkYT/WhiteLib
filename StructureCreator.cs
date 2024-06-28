@@ -15,6 +15,7 @@ using System.Reflection;
 using Il2CppInterop.Runtime.InteropTypes.Fields;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using TheForest.World;
+using Construction;
 
 namespace WhiteLib {
     public class StructureCreator {
@@ -31,6 +32,7 @@ namespace WhiteLib {
 		public static void Init() {
 			RLog.Msg("TestOnInit");
 			PopulateTabTemplates(GetHeldBook());
+			FindCraftingNodeTemplate();
 		}
 
 		internal static void PopulateTabTemplates(BlueprintBookController book) {
@@ -55,6 +57,15 @@ namespace WhiteLib {
 			heldBook = ItemDatabaseManager.ItemById(552)._heldPrefab.GetComponent<BlueprintBookController>();
             return heldBook;
         }
+
+		internal static StructureCraftingNode FindCraftingNodeTemplate() {
+			GameObject structureNodePrefab = CommonExtensions.Instantiate(ConstructionTools.GetRecipe(26)._structureNodePrefab, false);
+			StructureCraftingNode component = structureNodePrefab.GetComponent<StructureCraftingNode>();
+			CommonExtensions.TryDestroy(structureNodePrefab.transform.Find("LeanTo").gameObject);
+			CommonExtensions.HideAndDontSave(CommonExtensions.DontDestroyOnLoad(structureNodePrefab)).SetActive(false);
+			craftingNodeTemplate = component;
+			return craftingNodeTemplate;
+		}
 
         public static StructureRecipe CreateRecipe(int id, string structureName, Texture2D structureImage, GameObject blueprintModel, GameObject builtPrefab, ValueTuple<int, int>[] ingredients, StructureRecipe.CategoryType category, bool canRotate = true, bool alignToSurface = true)
 		{
@@ -192,12 +203,19 @@ namespace WhiteLib {
 
         internal static GameObject CreateBlueprintPrefab(GameObject blueprintModel, StructureRecipe recipe)
 		{
-			GameObject mainObject = Object.Instantiate<GameObject>(heldBook._pages.Pages.ToArray()[0]._topRecipe._structureNodePrefab);
-			mainObject.GetComponent<StructureCraftingNode>().OnDisable();
-			mainObject.name = recipe._displayName;
-			Object.DestroyImmediate(mainObject.transform.FindChild("LegacyHuntingShelter").gameObject);
-			GameObject blueprintObject = Object.Instantiate<GameObject>(blueprintModel, mainObject.transform, false);
-			blueprintObject.transform.localPosition = new Vector3(0f, 0f, 0f);
+			// GameObject mainObject = Object.Instantiate<GameObject>(heldBook._pages.Pages.ToArray()[0]._topRecipe._structureNodePrefab);
+			// mainObject.GetComponent<StructureCraftingNode>().OnDisable();
+			// mainObject.name = recipe._displayName;
+			// Object.DestroyImmediate(mainObject.transform.FindChild("LegacyHuntingShelter").gameObject);
+			StructureCraftingNode structureCraftingNode = Object.Instantiate<StructureCraftingNode>(craftingNodeTemplate);
+			foreach (StructureElement structureElement in structureCraftingNode.GetComponentsInChildren<StructureElement>(true)) {
+				Object.Destroy(structureElement.gameObject);
+			}
+
+			// GameObject blueprintObject = Object.Instantiate<GameObject>(blueprintModel, mainObject.transform, false);
+			GameObject blueprintObject = CommonExtensions.Instantiate(blueprintModel, false);
+			blueprintObject.transform.SetParent(structureCraftingNode.transform, false);
+			blueprintObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
 			Shader shader = Shader.Find("Sons/HDRPLit");
 			foreach (MeshRenderer meshRenderer in blueprintObject.GetComponentsInChildren<MeshRenderer>())
 			{
@@ -206,8 +224,7 @@ namespace WhiteLib {
 					material.shader = shader;
 				}
 			}
-			StructureCraftingNode MOCraftingNode = mainObject.GetComponent<StructureCraftingNode>();
-			MOCraftingNode._craftingIngredientLinks = new Il2CppSystem.Collections.Generic.List<StructureCraftingNode.CraftingIngredientLink>();
+			structureCraftingNode._craftingIngredientLinks = new Il2CppSystem.Collections.Generic.List<StructureCraftingNode.CraftingIngredientLink>();
             foreach (Transform child in blueprintObject.transform.GetChildren()) {
 				MatchCollection matchCollection = Regex.Matches(child.name, @"\((\d+)\)");
 				string text = String.Join("", matchCollection.Cast<Match>().Select(m => m.Groups[1].Value));
@@ -235,38 +252,39 @@ namespace WhiteLib {
 							materials = renderer.materials;
 						}
 					}
-					try {
-						RLog.Msg("1");
-						StructureGhostSwapper structureGhostSwapper;
-						RLog.Msg("2");
-						if (subChild.gameObject.GetComponent<StructureGhostSwapper>()) {
-							RLog.Msg("2.1");
-							structureGhostSwapper = subChild.gameObject.GetComponent<StructureGhostSwapper>();
-						} else {
-							RLog.Msg("2.2");
-							structureGhostSwapper = subChild.gameObject.AddComponent<StructureGhostSwapper>();
-						}
-						RLog.Msg("3");
-						structureGhostSwapper.Enable(false);
-						RLog.Msg("4");
-						structureGhostSwapper._isInitialised = false;
-						RLog.Msg("5");
-						renderer.materials = materials;
-						RLog.Msg("6");
-						renderer.material = materials[0];
-						RLog.Msg("7");
-						structureGhostSwapper.Enable(true);
-						RLog.Msg("8");
-					} catch (Exception e) {
-						RLog.Error(e.Message);
-					}
+					// try {
+					// 	RLog.Msg("1");
+					// 	StructureGhostSwapper structureGhostSwapper;
+					// 	RLog.Msg("2");
+					// 	if (subChild.gameObject.GetComponent<StructureGhostSwapper>()) {
+					// 		RLog.Msg("2.1");
+					// 		structureGhostSwapper = subChild.gameObject.GetComponent<StructureGhostSwapper>();
+					// 	} else {
+					// 		RLog.Msg("2.2");
+					// 		structureGhostSwapper = subChild.gameObject.AddComponent<StructureGhostSwapper>();
+					// 	}
+					// 	RLog.Msg("3");
+					// 	structureGhostSwapper.Enable(false);
+					// 	RLog.Msg("4");
+					// 	structureGhostSwapper._isInitialised = false;
+					// 	RLog.Msg("5");
+					// 	renderer.materials = materials;
+					// 	RLog.Msg("6");
+					// 	renderer.material = materials[0];
+					// 	RLog.Msg("7");
+					// 	structureGhostSwapper.Enable(true);
+					// 	RLog.Msg("8");
+					// } catch (Exception e) {
+					// 	RLog.Error(e.Message);
+					// }
                 }
-				MOCraftingNode._recipe = recipe;
-				MOCraftingNode._craftingIngredientLinks.Add(craftingIngredientLink);
+				structureCraftingNode._recipe = recipe;
+				structureCraftingNode._craftingIngredientLinks.Add(craftingIngredientLink);
             }
 
-			Object.DontDestroyOnLoad(mainObject);
-			return mainObject;
+			structureCraftingNode.gameObject.SetActive(true);
+			structureCraftingNode.ShowGhost(true);
+			return structureCraftingNode.gameObject;
 		}
 
         internal static Il2CppSystem.Collections.Generic.List<StructureCraftingRecipeIngredient> GetStructureIngredients(ValueTuple<int, int>[] ingredients)
