@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ToniMacaroni/RedLoader/main/MetadataSchema.json",
+  "id": "WhiteLib",
+  "author": "Przemekkk",
+  "version": "1.0.0",
+  "description": "A small library useful for my mods.",
+  "gameVersion": "1.0.0",
+  "type": "Library",
+  "url": "..."
+}
