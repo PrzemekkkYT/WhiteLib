@@ -11,12 +11,14 @@ using Endnight.Utilities;
 using UnityEngine.UI;
 using Il2CppInterop.Runtime.Injection;
 using RedLoader;
-using System.Reflection;
-using Il2CppInterop.Runtime.InteropTypes.Fields;
-using Il2CppInterop.Runtime.InteropTypes.Arrays;
-using TheForest.World;
 using Construction;
+using Bolt;
 using HarmonyLib;
+using Sons.Inventory;
+using Sons.Gameplay;
+using Sons.Gameplay.GrabBag;
+using Endnight.Rendering;
+using Il2Generic = Il2CppSystem.Collections.Generic;
 
 namespace WhiteLib {
     public class StructureCreator {
@@ -91,8 +93,48 @@ namespace WhiteLib {
 			structureRecipe._placeMode = StructureRecipe.PlaceModeType.Single;
 			structureRecipe._isDiscovered = true;
 			structureRecipe._structureNodePrefab = CommonExtensions.DontDestroyOnLoad(CreateBlueprintPrefab(blueprintModel, structureRecipe).gameObject);
+			
+			try {
+				builtPrefab.GetComponent<ScrewStructure>()._recipe = structureRecipe;
+			} catch (Exception e) {
+				RLog.Error($"CreateRecipe - {e.Message}");
+				try {
+				ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
+				screwStorageStructure._recipe = structureRecipe;
+				Il2CppSystem.Collections.Generic.List<StructureStorage> _storageSlots = new();
+				foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
+					_storageSlots.Add(hook.GetComponent<StructureStorage>());
+				}
+				screwStorageStructure._storageSlots = _storageSlots;
+
+
+				} catch (Exception e2) {
+					RLog.Error($"CreateRecipe - {e2.Message}");
+				}
+			}
+
+			RegisterBoltPrefab(structureRecipe._builtPrefab);
+			RegisterBoltPrefab(structureRecipe._structureNodePrefab);
+
 			return structureRecipe;
 		}
+
+		public static void RegisterBoltPrefab(GameObject go)
+		{
+			if (!BoltNetwork.isRunning)
+			{
+				return;
+			}
+            if (go.TryGetComponent<BoltEntity>(out BoltEntity boltEntity))
+            {
+                if (PrefabDatabase.Instance.Prefabs.Contains(go))
+                {
+                    return;
+                }
+                PrefabDatabase.Instance.Prefabs = PrefabDatabase.Instance.Prefabs.AddItem(go).ToArray<GameObject>();
+                PrefabDatabase._lookup[boltEntity.prefabId] = go;
+            }
+        }
 
 		public static void CreatePage(StructureRecipe topRecipe, StructureRecipe bottomRecipe, string pageTitle, Texture2D pageImage)
 		{
@@ -313,5 +355,77 @@ namespace WhiteLib {
 			}
 			return list;
 		}
-    }
+    
+		public static void ConfigureAsStructureStorage(GameObject go) {
+			Transform shelfPrefab = ConstructionTools.GetRecipe(49)._builtPrefab.transform;
+        
+			GameObject itemLayoutGroups = Object.Instantiate<GameObject>(shelfPrefab.FindChild("ItemLayoutGroups").gameObject, go.transform);
+
+			Transform grassRemover = go.transform.FindChild("GrassRemover");
+			grassRemover.gameObject.AddComponent<ExcludeRenderableFrom>()._excludedFrom = 
+				ExcludeRenderableFrom.Type.Collision & 
+				ExcludeRenderableFrom.Type.ExcludeFromHideArms & 
+				ExcludeRenderableFrom.Type.GreyOut & 
+				ExcludeRenderableFrom.Type.MaterialSwap & 
+				ExcludeRenderableFrom.Type.Outline & 
+				ExcludeRenderableFrom.Type.Sheen;
+
+			GameObject structureEnvironmentCleaner = Object.Instantiate<GameObject>(shelfPrefab.FindChild("StructureEnvironmentCleaner").gameObject, go.transform);
+			Il2Generic.List<Transform> grassRemoversList = new();
+			grassRemoversList.Add(grassRemover);
+			structureEnvironmentCleaner.GetComponent<ScrewStructureEnvironmentCleaner>()._grassRemovers = grassRemoversList;
+
+			// do skonfigurowania
+			BoltEntity boltEntity = go.AddComponent<BoltEntity>();
+			go.AddComponent<FreeFormStructureBuiltLinker>();
+			go.AddComponent<ScrewStructureBuiltLinker>()._entity = boltEntity;
+			go.AddComponent<ScrewStructureWithStorage>()._entity = boltEntity;
+
+			ItemStorageController itemStorageController = go.AddComponent<ItemStorageController>();
+			Il2Generic.List<ItemStorageHookPoint> hookPoints = new();
+			Il2Generic.List<GrabBagCategory> grabBagCategories = new();
+			grabBagCategories.Add(GrabBagCategory.Food);
+			grabBagCategories.Add(GrabBagCategory.Cooking);
+			grabBagCategories.Add(GrabBagCategory.Medicine);
+			grabBagCategories.Add(GrabBagCategory.Ammo);
+			grabBagCategories.Add(GrabBagCategory.ForStorage);
+			grabBagCategories.Add(GrabBagCategory.Throwables);
+			grabBagCategories.Add(GrabBagCategory.Tinker);
+			grabBagCategories.Add(GrabBagCategory.Armour);
+			grabBagCategories.Add(GrabBagCategory.Plants);
+			grabBagCategories.Add(GrabBagCategory.Seeds);
+			itemStorageController._grabBagCategories = grabBagCategories;
+
+			foreach (Transform hook in go.transform.FindAllDeepChild("Hook")) {
+				hook.gameObject.layer = LayerMask.NameToLayer("PickUp");
+
+				ItemInstanceManager instanceManager = hook.gameObject.AddComponent<ItemInstanceManager>();
+				
+				StructureStorage structureStorage = hook.gameObject.AddComponent<StructureStorage>();
+				structureStorage._boltEntity = boltEntity;
+				structureStorage._itemInstanceManager = instanceManager;
+
+				ItemStorageHookPoint hookPoint = hook.gameObject.AddComponent<ItemStorageHookPoint>();
+				hookPoint._interactionCollider = hook.GetComponent<Collider>();
+				Il2Generic.List<InWorldLayoutItemGroup> _itemlayoutGroups = new();
+				foreach (Transform layoutGroup in itemLayoutGroups.transform.GetChildren()) {
+					_itemlayoutGroups.Add(layoutGroup.GetComponent<InWorldLayoutItemGroup>());
+				}
+				hookPoint._itemLayoutGroups = _itemlayoutGroups;
+				itemStorageController._itemLayoutGroups = _itemlayoutGroups;
+				hookPoint._itemStorageController = itemStorageController;
+				hookPoints.Add(hookPoint);
+				hookPoint._storage = structureStorage;
+				hookPoint._itemAnchorLocalOffsetData = shelfPrefab.transform.FindDeepChild("Hook").GetComponent<ItemStorageHookPoint>()._itemAnchorLocalOffsetData;
+
+				GameObject _interElement = Object.Instantiate<GameObject>(shelfPrefab.FindDeepChild("InteractionElement").gameObject, hook);
+				_interElement.name = _interElement.name.Replace("(Clone)", "");
+
+				hookPoint._interactionElement = _interElement;
+
+				
+			}
+			itemStorageController._hookPoints = hookPoints;
+		}
+	}
 }
