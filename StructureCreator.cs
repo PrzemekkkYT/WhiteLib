@@ -16,14 +16,15 @@ using Il2CppInterop.Runtime.InteropTypes.Fields;
 using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using TheForest.World;
 using Construction;
+using HarmonyLib;
 
 namespace WhiteLib {
     public class StructureCreator {
 		public static Dictionary<string, GameObject> tabTemplates = new();
 		public static StructureCraftingNode craftingNodeTemplate = new();
+		public static Dictionary<string, Material> materialList = new();
 
         internal static BlueprintBookController heldBook;
-
 
 		internal static Dictionary<string, GameObject> GetTabTemplates() {
 			return tabTemplates;
@@ -63,6 +64,10 @@ namespace WhiteLib {
 			StructureCraftingNode component = structureNodePrefab.GetComponent<StructureCraftingNode>();
 			CommonExtensions.TryDestroy(structureNodePrefab.transform.Find("LeanTo").gameObject);
 			CommonExtensions.HideAndDontSave(CommonExtensions.DontDestroyOnLoad(structureNodePrefab)).SetActive(false);
+			foreach (StructureElement structureElement in structureNodePrefab.GetComponentsInChildren<StructureElement>(true)) {
+				Object.Destroy(structureElement.gameObject);
+			}
+			craftingNodeTemplate._ingredientUiTemplate = null;
 			craftingNodeTemplate = component;
 			return craftingNodeTemplate;
 		}
@@ -85,21 +90,22 @@ namespace WhiteLib {
 			structureRecipe._maxDistanceMultiplier = 1.5f;
 			structureRecipe._placeMode = StructureRecipe.PlaceModeType.Single;
 			structureRecipe._isDiscovered = true;
-			structureRecipe._structureNodePrefab = CreateBlueprintPrefab(blueprintModel, structureRecipe);
+			structureRecipe._structureNodePrefab = CommonExtensions.DontDestroyOnLoad(CreateBlueprintPrefab(blueprintModel, structureRecipe).gameObject);
 			return structureRecipe;
 		}
 
-		public static void CreatePage(StructureRecipe topRecipe, StructureRecipe bottomRecipe, Texture2D pageImage)
+		public static void CreatePage(StructureRecipe topRecipe, StructureRecipe bottomRecipe, string pageTitle, Texture2D pageImage)
 		{
             BlueprintBookPageData blueprintBookPageData = new BlueprintBookPageData
             {
                 _topRecipe = topRecipe,
                 _bottomRecipe = bottomRecipe,
                 _pageImage = pageImage,
-                _pageTitleLocalizationId = string.Empty
+                _pageTitleLocalizationId = pageTitle
             };
             heldBook._pages._pages.Add(blueprintBookPageData);
 		}
+
 // dodać możliwość dodania ikonki dla taba i spróbować dodać nazwę (możliwe, że wymagany będzie harmonypatch)
 		public static GameObject CreateTab(string tabName, Sprite tabIcon, Color tabColor, HeldBookInteraction rootTab = null) {
 			Transform tabsObject = heldBook.transform.FindDeepChild("Tabs");
@@ -201,90 +207,97 @@ namespace WhiteLib {
 			return newTab;
 		}
 
-        internal static GameObject CreateBlueprintPrefab(GameObject blueprintModel, StructureRecipe recipe)
+        internal static StructureCraftingNode CreateBlueprintPrefab(GameObject blueprintModel, StructureRecipe recipe)
 		{
-			// GameObject mainObject = Object.Instantiate<GameObject>(heldBook._pages.Pages.ToArray()[0]._topRecipe._structureNodePrefab);
-			// mainObject.GetComponent<StructureCraftingNode>().OnDisable();
-			// mainObject.name = recipe._displayName;
-			// Object.DestroyImmediate(mainObject.transform.FindChild("LegacyHuntingShelter").gameObject);
 			StructureCraftingNode structureCraftingNode = Object.Instantiate<StructureCraftingNode>(craftingNodeTemplate);
-			foreach (StructureElement structureElement in structureCraftingNode.GetComponentsInChildren<StructureElement>(true)) {
-				Object.Destroy(structureElement.gameObject);
-			}
+			GameObject modelObject = CommonExtensions.Instantiate(blueprintModel, false);
 
-			// GameObject blueprintObject = Object.Instantiate<GameObject>(blueprintModel, mainObject.transform, false);
-			GameObject blueprintObject = CommonExtensions.Instantiate(blueprintModel, false);
-			blueprintObject.transform.SetParent(structureCraftingNode.transform, false);
-			blueprintObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+			structureCraftingNode.gameObject.name = recipe._displayName;
+			
+			modelObject.SetParent(structureCraftingNode.transform, false);
+			modelObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+
 			Shader shader = Shader.Find("Sons/HDRPLit");
-			foreach (MeshRenderer meshRenderer in blueprintObject.GetComponentsInChildren<MeshRenderer>())
+			foreach (MeshRenderer meshRenderer in structureCraftingNode.gameObject.GetComponentsInChildren<MeshRenderer>())
 			{
 				foreach (Material material in meshRenderer.materials)
 				{
 					material.shader = shader;
 				}
 			}
-			structureCraftingNode._craftingIngredientLinks = new Il2CppSystem.Collections.Generic.List<StructureCraftingNode.CraftingIngredientLink>();
-            foreach (Transform child in blueprintObject.transform.GetChildren()) {
-				MatchCollection matchCollection = Regex.Matches(child.name, @"\((\d+)\)");
-				string text = String.Join("", matchCollection.Cast<Match>().Select(m => m.Groups[1].Value));
-				StructureCraftingNode.CraftingIngredientLink craftingIngredientLink = new StructureCraftingNode.CraftingIngredientLink();
-                foreach (Transform subChild in child.transform.GetChildren()) {
-                    StructureCraftingNodeIngredient structureCraftingNodeIngredient = subChild.gameObject.AddComponent<StructureCraftingNodeIngredient>();
-					structureCraftingNodeIngredient.OnValidate();
-					structureCraftingNodeIngredient._itemId = int.Parse(text);
-					structureCraftingNodeIngredient._requiresAllPreviousIngredients = false;
-
-					StructureCraftingRecipeIngredient structureCraftingRecipeIngredient = new StructureCraftingRecipeIngredient();
-					foreach (StructureCraftingRecipeIngredient ingredientFromRecipe in recipe._ingredients) {
-						if (ingredientFromRecipe.ItemId == structureCraftingNodeIngredient._itemId) {
-							structureCraftingRecipeIngredient.ItemId = ingredientFromRecipe.ItemId;
-							structureCraftingRecipeIngredient.Count = ingredientFromRecipe.Count;
-							craftingIngredientLink.Ingredient = structureCraftingRecipeIngredient;
+			
+			Dictionary<int, Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>> dictionary = new();
+			foreach (Transform itemGroup in modelObject.transform.GetChildren()) {
+				MatchCollection matchCollection = Regex.Matches(itemGroup.name, @"\((\d+)\)");
+				string itemId = String.Join("", matchCollection.Cast<Match>().Select(m => m.Groups[1].Value));
+				try {
+					foreach (Transform item in itemGroup.GetChildren()) {
+						Renderer renderer = item.GetComponent<Renderer>();
+						if (renderer != null) {
+							// if (!renderer.GetComponent<StructureGhostSwapper>()) {
+							// 	renderer.gameObject.AddComponent<StructureGhostSwapper>();
+							// }
+							if (!materialList.ContainsKey(item.name)) {
+								materialList.Add(item.name, renderer.material);
+							}
 						}
-					}
-					craftingIngredientLink._ingredients.Add(structureCraftingNodeIngredient);
 
-					Il2CppReferenceArray<Material> materials = new Il2CppReferenceArray<Material>(10);
-					MeshRenderer renderer = subChild.gameObject.GetComponent<MeshRenderer>();
-					if (renderer != null) {
-						if (renderer.material != null) {
-							materials = renderer.materials;
+						StructureCraftingNodeIngredient ingredient = item.gameObject.AddComponent<StructureCraftingNodeIngredient>();
+						ingredient._itemId = int.Parse(itemId);
+						ingredient._requiresAllPreviousIngredients = false;
+						if (!dictionary.ContainsKey(ingredient.ItemId)) {
+							dictionary.Add(ingredient._itemId, new Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>());
 						}
+						dictionary[ingredient._itemId].Add(ingredient);
 					}
-					// try {
-					// 	RLog.Msg("1");
-					// 	StructureGhostSwapper structureGhostSwapper;
-					// 	RLog.Msg("2");
-					// 	if (subChild.gameObject.GetComponent<StructureGhostSwapper>()) {
-					// 		RLog.Msg("2.1");
-					// 		structureGhostSwapper = subChild.gameObject.GetComponent<StructureGhostSwapper>();
-					// 	} else {
-					// 		RLog.Msg("2.2");
-					// 		structureGhostSwapper = subChild.gameObject.AddComponent<StructureGhostSwapper>();
-					// 	}
-					// 	RLog.Msg("3");
-					// 	structureGhostSwapper.Enable(false);
-					// 	RLog.Msg("4");
-					// 	structureGhostSwapper._isInitialised = false;
-					// 	RLog.Msg("5");
-					// 	renderer.materials = materials;
-					// 	RLog.Msg("6");
-					// 	renderer.material = materials[0];
-					// 	RLog.Msg("7");
-					// 	structureGhostSwapper.Enable(true);
-					// 	RLog.Msg("8");
-					// } catch (Exception e) {
-					// 	RLog.Error(e.Message);
-					// }
-                }
-				structureCraftingNode._recipe = recipe;
-				structureCraftingNode._craftingIngredientLinks.Add(craftingIngredientLink);
-            }
+				} catch (Exception e) {
+					RLog.Error($"1 {e.Message}");
+				}
+			}
+			structureCraftingNode._craftingIngredientLinks.Clear();
+			foreach (KeyValuePair<int, Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>> keyValuePair in dictionary)
+			{
+				int itemId;
+				Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient> ingredientList;
+				keyValuePair.Deconstruct(out itemId, out ingredientList);
+				structureCraftingNode._craftingIngredientLinks.Add(new StructureCraftingNode.CraftingIngredientLink{
+					Ingredient = new StructureCraftingRecipeIngredient{
+						Count = ingredientList.Count,
+						ItemId = itemId
+					},
+					_ingredients = ingredientList
+				});
+			}
 
+			structureCraftingNode._recipe = recipe;
+			
+			InitObjectInteraction(structureCraftingNode);
+
+			ClassInjector.RegisterTypeInIl2Cpp<GhostFix>();
+			structureCraftingNode.gameObject.AddComponent<GhostFix>().structureCraftingNode = structureCraftingNode;
+			
 			structureCraftingNode.gameObject.SetActive(true);
 			structureCraftingNode.ShowGhost(true);
-			return structureCraftingNode.gameObject;
+			return structureCraftingNode;
+		}
+
+		internal static void InitObjectInteraction(StructureCraftingNode node) {
+			if (node._ingredientUiTemplate)
+			{
+				return;
+			}
+			try {
+				Transform transform = CommonExtensions.Instantiate(craftingNodeTemplate.transform.Find("StructureInteractionObjects").gameObject, false).transform;
+				transform.SetParent(node.transform, false);
+				transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+				node._ingredientUiTemplate = transform.Find("Canvas/UiRoot/Ingredients/IngredientUiTemplate").gameObject;
+				node._cancelStructureInteractionElement = transform.Find("Canvas/UiRoot/CancelStructureInteractionElement").gameObject;
+				node._ingredientUi = new Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredientUi>();
+				node._ingredientUi.Add(transform.Find("Canvas/UiRoot/Ingredients/IngredientUi").GetComponent<StructureCraftingNodeIngredientUi>());
+				transform.Find("UiLocator").localPosition = node.GetComponent<BoxCollider>().center;
+			} catch (Exception e) {
+				RLog.Error(e.Message);
+			}
 		}
 
         internal static Il2CppSystem.Collections.Generic.List<StructureCraftingRecipeIngredient> GetStructureIngredients(ValueTuple<int, int>[] ingredients)
