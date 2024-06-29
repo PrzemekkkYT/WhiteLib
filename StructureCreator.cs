@@ -216,6 +216,15 @@ namespace WhiteLib {
 			
 			modelObject.SetParent(structureCraftingNode.transform, false);
 			modelObject.transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+
+			Shader shader = Shader.Find("Sons/HDRPLit");
+			foreach (MeshRenderer meshRenderer in structureCraftingNode.gameObject.GetComponentsInChildren<MeshRenderer>())
+			{
+				foreach (Material material in meshRenderer.materials)
+				{
+					material.shader = shader;
+				}
+			}
 			
 			Dictionary<int, Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>> dictionary = new();
 			foreach (Transform itemGroup in modelObject.transform.GetChildren()) {
@@ -264,30 +273,8 @@ namespace WhiteLib {
 			
 			InitObjectInteraction(structureCraftingNode);
 
-			if (Regex.IsMatch(structureCraftingNode.transform.root.name, @"^Blueprint__.*[^)]$")) {
-				RLog.Msg("dupa");
-				foreach (Transform item in structureCraftingNode.transform.FindAllDeepChildRegex(@"\((\d+)\)")) {
-					try {
-						Renderer renderer = item.GetComponent<Renderer>();
-						StructureGhostSwapper structureGhostSwapper;
-						if (item.gameObject.GetComponent<StructureGhostSwapper>()) {
-							structureGhostSwapper = item.gameObject.GetComponent<StructureGhostSwapper>();
-						} else {
-							structureGhostSwapper = item.gameObject.AddComponent<StructureGhostSwapper>();
-						}
-						structureGhostSwapper.Enable(false);
-						structureGhostSwapper._isInitialised = false;
-						renderer.materials = new Il2CppReferenceArray<Material>(1);
-						renderer.materials.Append(materialList[item.name]);
-						renderer.material = materialList[item.name];
-						// structureGhostSwapper.Enable(true);
-					} catch (Exception e) {
-						RLog.Error($"2 {e.Message}");
-					}
-				}
-			} else {
-				RLog.Msg("cipa");
-			}
+			ClassInjector.RegisterTypeInIl2Cpp<GhostFix>();
+			structureCraftingNode.gameObject.AddComponent<GhostFix>().structureCraftingNode = structureCraftingNode;
 			
 			structureCraftingNode.gameObject.SetActive(true);
 			structureCraftingNode.ShowGhost(true);
