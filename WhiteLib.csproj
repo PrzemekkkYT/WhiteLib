@@ -78,6 +78,9 @@
       <Reference Include="UnityEngine.AnimationModule">
         <HintPath>$(GameDir)\_RedLoader\Game\UnityEngine.AnimationModule.dll</HintPath>
       </Reference>
+      <Reference Include="Unity.Localization">
+        <HintPath>$(GameDir)\_RedLoader\Game\Unity.Localization.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
     <ItemGroup>
