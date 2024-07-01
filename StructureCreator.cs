@@ -13,7 +13,6 @@ using Sons.Gameplay;
 using Sons.Gameplay.GrabBag;
 using Endnight.Rendering;
 using Il2Generic = Il2CppSystem.Collections.Generic;
-using Whitelib;
 
 namespace WhiteLib {
     public class StructureCreator {
@@ -21,9 +20,8 @@ namespace WhiteLib {
 		public static Dictionary<string, Material> materialList = new();
 
 		public static void Init() {
-			HeldBookCreator.Init();
-			FindCraftingNodeTemplate();
-			RLog.Msg("StructureCreator Initiated");
+			craftingNodeTemplate = FindCraftingNodeTemplate();
+			// RLog.Msg("StructureCreator Initiated");
 		}
 
 		internal static StructureCraftingNode FindCraftingNodeTemplate() {
@@ -34,9 +32,8 @@ namespace WhiteLib {
 			foreach (StructureElement structureElement in structureNodePrefab.GetComponentsInChildren<StructureElement>(true)) {
 				Object.Destroy(structureElement.gameObject);
 			}
-			craftingNodeTemplate._ingredientUiTemplate = null;
-			craftingNodeTemplate = component;
-			return craftingNodeTemplate;
+			component._ingredientUiTemplate = null;
+			return component;
 		}
 
         public static StructureRecipe CreateRecipe(int id, string structureName, Texture2D structureImage, GameObject blueprintModel, GameObject builtPrefab, ValueTuple<int, int>[] ingredients, StructureRecipe.CategoryType category, bool canRotate = true, bool alignToSurface = true)
@@ -61,19 +58,19 @@ namespace WhiteLib {
 			try {
 				builtPrefab.GetComponent<ScrewStructure>()._recipe = structureRecipe;
 			} catch (Exception e) {
-				RLog.Error($"CreateRecipe - {e.Message}");
+				RLog.Error($"CreateRecipe - Missing ScrewStructure - {e.Message}");
 				try {
-				ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
-				screwStorageStructure._recipe = structureRecipe;
-				Il2CppSystem.Collections.Generic.List<StructureStorage> _storageSlots = new();
-				foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
-					_storageSlots.Add(hook.GetComponent<StructureStorage>());
-				}
-				screwStorageStructure._storageSlots = _storageSlots;
-
+					ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
+					screwStorageStructure._recipe = structureRecipe;
+                    Il2Generic.List<StructureStorage> _storageSlots = new();
+					foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
+						_storageSlots.Add(hook.GetComponent<StructureStorage>());
+					}
+					screwStorageStructure._storageSlots = _storageSlots;
+					RLog.Msg($"{structureName} | StorageSlots Count: {_storageSlots.Count}");
 
 				} catch (Exception e2) {
-					RLog.Error($"CreateRecipe - {e2.Message}");
+					RLog.Error($"CreateRecipe - Something with StructureWithStorage  - {e2.Message}");
 				}
 			}
 
@@ -163,7 +160,6 @@ namespace WhiteLib {
 			
 			InitObjectInteraction(structureCraftingNode);
 
-			ClassInjector.RegisterTypeInIl2Cpp<GhostFix>();
 			structureCraftingNode.gameObject.AddComponent<GhostFix>().structureCraftingNode = structureCraftingNode;
 			
 			structureCraftingNode.gameObject.SetActive(true);
@@ -177,14 +173,15 @@ namespace WhiteLib {
 				return;
 			}
 			try {
-				Transform transform = CommonExtensions.Instantiate(craftingNodeTemplate.transform.Find("StructureInteractionObjects").gameObject, false).transform;
-				transform.SetParent(node.transform, false);
-				transform.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
-				node._ingredientUiTemplate = transform.Find("Canvas/UiRoot/Ingredients/IngredientUiTemplate").gameObject;
-				node._cancelStructureInteractionElement = transform.Find("Canvas/UiRoot/CancelStructureInteractionElement").gameObject;
+				Object.Destroy(node.transform.Find("StructureInteractionObjects").gameObject);
+				Transform interactionObjects = CommonExtensions.Instantiate(craftingNodeTemplate.transform.Find("StructureInteractionObjects").gameObject, false).transform;
+				interactionObjects.SetParent(node.transform, false);
+				interactionObjects.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+				node._ingredientUiTemplate = interactionObjects.Find("Canvas/UiRoot/Ingredients/IngredientUiTemplate").gameObject;
+				node._cancelStructureInteractionElement = interactionObjects.Find("Canvas/UiRoot/CancelStructureInteractionElement").gameObject;
 				node._ingredientUi = new Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredientUi>();
-				node._ingredientUi.Add(transform.Find("Canvas/UiRoot/Ingredients/IngredientUi").GetComponent<StructureCraftingNodeIngredientUi>());
-				transform.Find("UiLocator").localPosition = node.GetComponent<BoxCollider>().center;
+				node._ingredientUi.Add(interactionObjects.Find("Canvas/UiRoot/Ingredients/IngredientUi").GetComponent<StructureCraftingNodeIngredientUi>());
+				interactionObjects.Find("UiLocator").localPosition = node.GetComponent<BoxCollider>().center;
 			} catch (Exception e) {
 				RLog.Error(e.Message);
 			}

@@ -81,6 +81,12 @@
       <Reference Include="Unity.Localization">
         <HintPath>$(GameDir)\_RedLoader\Game\Unity.Localization.dll</HintPath>
       </Reference>
+      <Reference Include="Sons.Input">
+        <HintPath>$(GameDir)\_RedLoader\Game\Sons.Input.dll</HintPath>
+      </Reference>
+      <Reference Include="Unity.InputSystem">
+        <HintPath>$(GameDir)\_RedLoader\Game\Unity.InputSystem.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
     <ItemGroup>

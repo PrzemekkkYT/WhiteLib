@@ -13,13 +13,15 @@ using WhiteLib;
 using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
 
-namespace Whitelib {
+namespace WhiteLib {
     public class HeldBookCreator {
         public static Dictionary<string, GameObject> tabTemplates = new();
 		public static HeldBookInteraction missingTabs_lastRoot;
         internal static BlueprintBookController heldBook;
 
         public static void Init() {
+			ClassInjector.RegisterTypeInIl2Cpp<SubTabsController>();
+
             PopulateTabTemplates(GetHeldBook());
             CreateMissingTabs();
 			RLog.Msg("HeldBookCreator Initiated");
@@ -174,7 +176,6 @@ namespace Whitelib {
 					}
 					
 					newTab.AddComponent<LayoutElement>().ignoreLayout = true;
-					ClassInjector.RegisterTypeInIl2Cpp<SubTabsController>();
 					newTab.AddComponent<SubTabsController>();
 				} else {
 					return null;
