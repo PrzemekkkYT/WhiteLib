@@ -9,8 +9,8 @@ namespace WhiteLib {
 
         public static void GameActiveInit() {
 			ClassInjector.RegisterTypeInIl2Cpp<GhostFix>();
-			ClassInjector.RegisterTypeInIl2Cpp<ShutterController>();
-			ClassInjector.RegisterTypeInIl2Cpp<Shutter>();
+			ClassInjector.RegisterTypeInIl2Cpp<DoorController>();
+			ClassInjector.RegisterTypeInIl2Cpp<Door>();
 		}
     }
 }
