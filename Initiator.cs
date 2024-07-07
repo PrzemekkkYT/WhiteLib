@@ -1,7 +1,7 @@
 using Il2CppInterop.Runtime.Injection;
 
 namespace WhiteLib {
-    public static class WhiteLib {
+    public class Initiator {
         public static void Init() {
             StructureCreator.Init();
             HeldBookCreator.Init();
@@ -11,6 +11,7 @@ namespace WhiteLib {
 			ClassInjector.RegisterTypeInIl2Cpp<GhostFix>();
 			ClassInjector.RegisterTypeInIl2Cpp<DoorController>();
 			ClassInjector.RegisterTypeInIl2Cpp<Door>();
+            Assets.Init();
 		}
     }
 }

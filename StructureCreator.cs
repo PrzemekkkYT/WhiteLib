@@ -13,37 +13,55 @@ using Sons.Gameplay;
 using Sons.Gameplay.GrabBag;
 using Endnight.Rendering;
 using Il2Generic = Il2CppSystem.Collections.Generic;
+using Endnight.Types;
+using Sons.VFX;
 
 namespace WhiteLib {
     public class StructureCreator {
-		public static StructureCraftingNode craftingNodeTemplate = new();
+		public static string _nodeSerializerGuid;
+		public static string _prefabSerializerGuid;
+		public static StructureCraftingNode _craftingNodeTemplate;
 		public static Dictionary<string, Material> materialList = new();
 
 		public static void Init() {
-			craftingNodeTemplate = FindCraftingNodeTemplate();
-			// RLog.Msg("StructureCreator Initiated");
+			if (!_craftingNodeTemplate) {
+				_craftingNodeTemplate = FindCraftingNodeTemplate();
+			}
+			if (_nodeSerializerGuid == null || _prefabSerializerGuid == null) {
+				GetSerializersGuids();
+			}
+			RLog.Msg("StructureCreator Initiated");
+		}
+
+		internal static void GetSerializersGuids() {
+			_nodeSerializerGuid = ConstructionTools.GetRecipe(49)._structureNodePrefab.GetComponent<BoltEntity>()._serializerGuid;
+			_prefabSerializerGuid = ConstructionTools.GetRecipe(49)._builtPrefab.GetComponent<BoltEntity>()._serializerGuid;
 		}
 
 		internal static StructureCraftingNode FindCraftingNodeTemplate() {
-			GameObject structureNodePrefab = CommonExtensions.Instantiate(ConstructionTools.GetRecipe(26)._structureNodePrefab, false);
+			GameObject structureNodePrefab = Object.Instantiate<GameObject>(ConstructionTools.GetRecipe(49)._structureNodePrefab, null);
 			StructureCraftingNode component = structureNodePrefab.GetComponent<StructureCraftingNode>();
-			CommonExtensions.TryDestroy(structureNodePrefab.transform.Find("LeanTo").gameObject);
+			component.OnDisable();
+			Object.DestroyImmediate(structureNodePrefab.transform.FindChild("Ingredients").gameObject);
 			CommonExtensions.HideAndDontSave(CommonExtensions.DontDestroyOnLoad(structureNodePrefab)).SetActive(false);
 			foreach (StructureElement structureElement in structureNodePrefab.GetComponentsInChildren<StructureElement>(true)) {
 				Object.Destroy(structureElement.gameObject);
 			}
 			component._ingredientUiTemplate = null;
+			component.OnEnable();
 			return component;
 		}
 
-        public static StructureRecipe CreateRecipe(int id, string structureName, Texture2D structureImage, GameObject blueprintModel, GameObject builtPrefab, ValueTuple<int, int>[] ingredients, StructureRecipe.CategoryType category, bool canRotate = true, bool alignToSurface = true)
+        public static StructureRecipe CreateRecipe(int id, string structureName, Texture2D structureImage, GameObject blueprintModel, GameObject builtPrefab, ValueTuple<int, int>[] ingredients, StructureRecipe.CategoryType category, int boltPrefabId, bool canRotate = true, bool alignToSurface = true)
 		{
 			StructureRecipe structureRecipe = ScriptableObject.CreateInstance<StructureRecipe>();
 			structureRecipe._id = id;
+			structureRecipe._boltPrefabId = boltPrefabId;
+			structureRecipe.name = $"{structureName}Recipe";
 			structureImage.name = structureName;
 			structureRecipe._displayName = structureName;
 			structureRecipe._recipeImage = structureImage;
-			structureRecipe._builtPrefab = builtPrefab;
+			structureRecipe._builtPrefab = CommonExtensions.DontDestroyOnLoad(builtPrefab);
 			structureRecipe._ingredients = GetStructureIngredients(ingredients);
 			structureRecipe._anchor = StructureRecipe.AnchorType.Bottom;
 			structureRecipe._alignToSurface = alignToSurface;
@@ -54,25 +72,41 @@ namespace WhiteLib {
 			structureRecipe._maxDistanceMultiplier = 1.5f;
 			structureRecipe._placeMode = StructureRecipe.PlaceModeType.Single;
 			structureRecipe._isDiscovered = true;
-			structureRecipe._structureNodePrefab = CommonExtensions.DontDestroyOnLoad(CreateBlueprintPrefab(blueprintModel, structureRecipe).gameObject);
-			try {
+			structureRecipe._structureNodePrefab = CommonExtensions.DontDestroyOnLoad(CreateBlueprintNode(blueprintModel, structureRecipe, boltPrefabId).gameObject);
+			
+			if (builtPrefab.GetComponent<ScrewStructure>()) {
 				builtPrefab.GetComponent<ScrewStructure>()._recipe = structureRecipe;
-			} catch (Exception e) {
-				RLog.Error($"CreateRecipe - Missing ScrewStructure - {e.Message}");
-				try {
-					ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
-					screwStorageStructure._recipe = structureRecipe;
-                    Il2Generic.List<StructureStorage> _storageSlots = new();
-					foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
-						_storageSlots.Add(hook.GetComponent<StructureStorage>());
-					}
-					screwStorageStructure._storageSlots = _storageSlots;
-					RLog.Msg($"{structureName} | StorageSlots Count: {_storageSlots.Count}");
-
-				} catch (Exception e2) {
-					RLog.Error($"CreateRecipe - Something with StructureWithStorage  - {e2.Message}");
+			} else if (builtPrefab.GetComponent<ScrewStructureWithStorage>()) {
+				ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
+				screwStorageStructure._recipe = structureRecipe;
+                Il2Generic.List<StructureStorage> _storageSlots = new();
+				foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
+					_storageSlots.Add(hook.GetComponent<StructureStorage>());
 				}
+				screwStorageStructure._storageSlots = _storageSlots;
+				RLog.Msg($"{structureName} | StorageSlots Count: {_storageSlots.Count}");
 			}
+			
+			// try {
+			// 	builtPrefab.GetComponent<ScrewStructure>()._recipe = structureRecipe;
+			// } catch (Exception e) {
+			// 	RLog.Error($"CreateRecipe - Missing ScrewStructure - {e.Message}");
+			// 	try {
+			// 		ScrewStructureWithStorage screwStorageStructure = builtPrefab.GetComponent<ScrewStructureWithStorage>();
+			// 		screwStorageStructure._recipe = structureRecipe;
+            //         Il2Generic.List<StructureStorage> _storageSlots = new();
+			// 		foreach (Transform hook in structureRecipe._builtPrefab.transform.FindAllDeepChild("Hook")) {
+			// 			_storageSlots.Add(hook.GetComponent<StructureStorage>());
+			// 		}
+			// 		screwStorageStructure._storageSlots = _storageSlots;
+			// 		RLog.Msg($"{structureName} | StorageSlots Count: {_storageSlots.Count}");
+
+			// 	} catch (Exception e2) {
+			// 		RLog.Error($"CreateRecipe - Something with StructureWithStorage  - {e2.Message}");
+			// 	}
+			// }
+
+			SingletonBehaviour<ScrewStructureManager>._instance._database._recipes.Add(structureRecipe);
 
 			RegisterBoltPrefab(structureRecipe._builtPrefab);
 			RegisterBoltPrefab(structureRecipe._structureNodePrefab);
@@ -80,26 +114,34 @@ namespace WhiteLib {
 			return structureRecipe;
 		}
 
-		public static void RegisterBoltPrefab(GameObject go)
+		public static void RegisterBoltPrefab(GameObject objectWithBolt)
 		{
 			if (!BoltNetwork.isRunning)
 			{
 				return;
 			}
-            if (go.TryGetComponent<BoltEntity>(out BoltEntity boltEntity))
+            if (objectWithBolt.TryGetComponent<BoltEntity>(out BoltEntity boltEntity))
             {
-                if (PrefabDatabase.Instance.Prefabs.Contains(go))
+                if (PrefabDatabase.Instance.Prefabs.Contains(objectWithBolt))
                 {
                     return;
                 }
-                PrefabDatabase.Instance.Prefabs = PrefabDatabase.Instance.Prefabs.AddItem(go).ToArray<GameObject>();
-                PrefabDatabase._lookup[boltEntity.prefabId] = go;
+                PrefabDatabase.Instance.Prefabs = PrefabDatabase.Instance.Prefabs.AddItem(objectWithBolt).ToArray<GameObject>();
+                PrefabDatabase._lookup[boltEntity.prefabId] = objectWithBolt;
             }
         }
 
-        internal static StructureCraftingNode CreateBlueprintPrefab(GameObject blueprintModel, StructureRecipe recipe)
+        internal static StructureCraftingNode CreateBlueprintNode(GameObject blueprintModel, StructureRecipe recipe, int boltPrefabId)
 		{
-			StructureCraftingNode structureCraftingNode = Object.Instantiate<StructureCraftingNode>(craftingNodeTemplate);
+			BoltEntity boltEntity = blueprintModel.AddComponent<BoltEntity>();
+			boltEntity._prefabId = boltPrefabId;
+			boltEntity._queryOptionIEntityBehaviour = QueryOptions.GetComponentsInChildren;
+			boltEntity._queryOptionIEntityReplicationFilter = QueryOptions.GetComponentsInChildren;
+			boltEntity._queryOptionIPriorityCalculator = QueryOptions.GetComponentsInChildren;
+			boltEntity._serializerGuid = _nodeSerializerGuid;
+			boltEntity._sceneGuid = "";
+
+			StructureCraftingNode structureCraftingNode = Object.Instantiate<StructureCraftingNode>(_craftingNodeTemplate);
 			GameObject modelObject = CommonExtensions.Instantiate(blueprintModel, false);
 
 			structureCraftingNode.gameObject.name = recipe._displayName;
@@ -116,7 +158,7 @@ namespace WhiteLib {
 				}
 			}
 			
-			Dictionary<int, Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>> dictionary = new();
+			Dictionary<int, Il2Generic.List<StructureCraftingNodeIngredient>> dictionary = new();
 			foreach (Transform itemGroup in modelObject.transform.GetChildren()) {
 				MatchCollection matchCollection = Regex.Matches(itemGroup.name, @"\((\d+)\)");
 				string itemId = String.Join("", matchCollection.Cast<Match>().Select(m => m.Groups[1].Value));
@@ -142,7 +184,7 @@ namespace WhiteLib {
 				}
 			}
 			structureCraftingNode._craftingIngredientLinks.Clear();
-			foreach (KeyValuePair<int, Il2CppSystem.Collections.Generic.List<StructureCraftingNodeIngredient>> keyValuePair in dictionary)
+			foreach (KeyValuePair<int, Il2Generic.List<StructureCraftingNodeIngredient>> keyValuePair in dictionary)
 			{
 				int itemId;
                 Il2Generic.List<StructureCraftingNodeIngredient> ingredientList;
@@ -174,7 +216,7 @@ namespace WhiteLib {
 			}
 			try {
 				Object.Destroy(node.transform.Find("StructureInteractionObjects").gameObject);
-				Transform interactionObjects = CommonExtensions.Instantiate(craftingNodeTemplate.transform.Find("StructureInteractionObjects").gameObject, false).transform;
+				Transform interactionObjects = CommonExtensions.Instantiate(_craftingNodeTemplate.transform.Find("StructureInteractionObjects").gameObject, false).transform;
 				interactionObjects.SetParent(node.transform, false);
 				interactionObjects.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
 				node._ingredientUiTemplate = interactionObjects.Find("Canvas/UiRoot/Ingredients/IngredientUiTemplate").gameObject;
@@ -201,7 +243,7 @@ namespace WhiteLib {
 			return list;
 		}
     
-		public static void ConfigureAsStructureStorage(GameObject go) {
+		public static void ConfigureAsStructureStorage(GameObject go, int boltPrefabId) {
 			Transform shelfPrefab = ConstructionTools.GetRecipe(49)._builtPrefab.transform;
         
 			GameObject itemLayoutGroups = Object.Instantiate<GameObject>(shelfPrefab.FindChild("ItemLayoutGroups").gameObject, go.transform);
@@ -220,8 +262,15 @@ namespace WhiteLib {
 			grassRemoversList.Add(grassRemover);
 			structureEnvironmentCleaner.GetComponent<ScrewStructureEnvironmentCleaner>()._grassRemovers = grassRemoversList;
 
-			// do skonfigurowania
+			// do skonfigurowania (nie wiem czy coś zostało do skonfigurowania, trzeba to sprawdzić)
 			BoltEntity boltEntity = go.AddComponent<BoltEntity>();
+			boltEntity._prefabId = boltPrefabId;
+			boltEntity._queryOptionIEntityBehaviour = QueryOptions.GetComponentsInChildren;
+			boltEntity._queryOptionIEntityReplicationFilter = QueryOptions.GetComponentsInChildren;
+			boltEntity._queryOptionIPriorityCalculator = QueryOptions.GetComponentsInChildren;
+			boltEntity._serializerGuid = _prefabSerializerGuid;
+			boltEntity._sceneGuid = "";
+
 			go.AddComponent<FreeFormStructureBuiltLinker>();
 			go.AddComponent<ScrewStructureBuiltLinker>()._entity = boltEntity;
 			go.AddComponent<ScrewStructureWithStorage>()._entity = boltEntity;
@@ -271,6 +320,14 @@ namespace WhiteLib {
 				
 			}
 			itemStorageController._hookPoints = hookPoints;
+		}
+
+		public static void AddStructureDestruction(GameObject go, int hp, AudioImpactMaterial impactAudioMaterial, ParticleTypes impactParticleType) {
+			ScrewStructureDestruction destruction = go.transform.FindChild("Renderables").gameObject.AddComponent<ScrewStructureDestruction>();
+			destruction._currentHp = hp;
+			destruction._impactMaterialType = impactAudioMaterial;
+			destruction._impactParticleType = impactParticleType;
+			destruction._entity = go.GetComponent<BoltEntity>();
 		}
 	}
 }

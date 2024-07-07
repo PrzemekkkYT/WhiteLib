@@ -12,6 +12,7 @@ using Endnight.Utilities;
 using WhiteLib;
 using UnityEngine.Localization.Settings;
 using UnityEngine.Localization.Tables;
+using SonsSdk;
 
 namespace WhiteLib {
     public class HeldBookCreator {
@@ -23,19 +24,18 @@ namespace WhiteLib {
 			ClassInjector.RegisterTypeInIl2Cpp<SubTabsController>();
 
             PopulateTabTemplates(GetHeldBook());
-            CreateMissingTabs();
+            // CreateMissingTabs();
 			RLog.Msg("HeldBookCreator Initiated");
         }
 		
 
 		internal static void CreateMissingTabs() {
-			int PAGESBASENUM = 39;
 			int pagesCount = heldBook._pages.Pages.Count;
-			RLog.Debug(pagesCount);
-			if (pagesCount > PAGESBASENUM) {
-				GameObject temp_tab = null;
+			int tabsCount = heldBook._tabs.Count;
+			if (pagesCount > tabsCount) {
 				int subTabs = 0;
-				for (int i = 0; i < pagesCount-PAGESBASENUM; i++) {
+				GameObject temp_tab = null;
+				for (int i = 0; i < pagesCount-tabsCount; i++) {
 					RLog.Warning(i);
 					if (temp_tab == null || subTabs >= 7) {
 						temp_tab = CreateTab($"Missing", Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height), new Vector2(0.5f, 0.5f)), Color.magenta);
@@ -50,20 +50,23 @@ namespace WhiteLib {
 		}
 
         internal static void PopulateTabTemplates(BlueprintBookController book) {
-			GameObject tempRootTab = Object.Instantiate<GameObject>(book.transform.FindDeepChild("Tab_Storage").gameObject);
+			if (tabTemplates.Count == 0) {
+				GameObject tempRootTab = Object.Instantiate<GameObject>(book.transform.FindDeepChild("Tab_Storage").gameObject);
 
-			GameObject tempTab = Object.Instantiate<GameObject>(tempRootTab);
-			Object.DestroyImmediate(tempTab.transform.Find("AnimRoot/Tab1").gameObject);
-			tempTab.name = tempTab.name.Replace("(Clone)", "");
-			tabTemplates.Add("RootTab", tempTab);
-
-			for (int i = 1; i < 8; i++) {
-				tempTab = Object.Instantiate<GameObject>(tempRootTab.transform.FindDeepChild(string.Format("Tab{0}", i)).gameObject);
-				if (i<7) {
-					Object.DestroyImmediate(tempTab.transform.Find(string.Format("AnimRoot/Tab{0}", i+1)).gameObject);
-				}
+				GameObject tempTab = CommonExtensions.DontDestroyOnLoad(Object.Instantiate<GameObject>(tempRootTab));
+				Object.DestroyImmediate(tempTab.transform.Find("AnimRoot/Tab1").gameObject);
 				tempTab.name = tempTab.name.Replace("(Clone)", "");
-				tabTemplates.Add(tempTab.name, tempTab);
+				tabTemplates.Add("RootTab", tempTab);
+			
+				for (int i = 1; i < 8; i++) {
+					tempTab = CommonExtensions.DontDestroyOnLoad(Object.Instantiate<GameObject>(tempRootTab.transform.FindDeepChild(string.Format("Tab{0}", i)).gameObject));
+					if (i<7) {
+						Object.DestroyImmediate(tempTab.transform.Find(string.Format("AnimRoot/Tab{0}", i+1)).gameObject);
+					}
+					tempTab.name = tempTab.name.Replace("(Clone)", "");
+					tabTemplates.Add(tempTab.name, tempTab);
+				}
+				Object.Destroy(tempRootTab);
 			}
 		}
 
